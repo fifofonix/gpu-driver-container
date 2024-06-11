@@ -27,7 +27,7 @@ Currently built driver versions are specified in `ci/fedora/.common-ci-fcos.yml`
 The driver container is privileged, and here we choose to launch via podman instead of docker although both work.
 
 ```bash
-$ DRIVER_VERSION=535.154.05 # Check ci/fedora/.common-ci-fcos.yml for latest driver versions
+$ DRIVER_VERSION=550.90.07 # Check ci/fedora/.common-ci-fcos.yml for latest driver versions
 $ FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2)
 $ podman run -d --privileged --pid=host \
      -v /run/nvidia:/run/nvidia:shared \
@@ -69,16 +69,17 @@ systemd:
         ExecStart=/bin/sh -c ' \
           FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2); \
           KERNEL_VERSION=$(/bin/uname -r); \
-          if /bin/podman manifest inspect registry.gitlab.com/container-toolkit-fcos/driver:${nvidia_driver_version}-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID > /dev/null; then \
-            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:${nvidia_driver_version}-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID; \
+          if /bin/podman manifest inspect registry.gitlab.com/container-toolkit-fcos/driver:550.90.07-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID > /dev/null; then \
+            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:550.90.07-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID; \
           else \
-            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:${nvidia_driver_version}-fedora$$FEDORA_VERSION_ID; \
+            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:550.90.07-fedora$$FEDORA_VERSION_ID; \
+            PATCH_MOUNT="-v /var/acme/nvidia-driver-patch:/patch"
           fi; \
           /bin/podman pull $$IMAGE_NAME; \
           /bin/podman run --name nvidia-driver \
             -v /run/nvidia:/run/nvidia:shared \
             -v /var/log:/var/log \
-            -v /var/acme/nvidia-driver-patch:/patch \
+            $$PATCH_MOUNT \
             --privileged \
             --pid host \
             $$IMAGE_NAME \
@@ -100,28 +101,26 @@ You should be able to step into the driver container and run the `nvidia-smi` to
 $ # Assumes you're running the driver container via podman and named nvidia-driver as above...
 $ podman exec -it nvidia-driver sh
 sh-5.2# nvidia-smi
-Wed Feb 14 17:58:08 2024
-+---------------------------------------------------------------------------------------+
-| NVIDIA-SMI 535.154.05             Driver Version: 535.154.05   CUDA Version: 12.2     |
-|-----------------------------------------+----------------------+----------------------+
-| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
-| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
-|                                         |                      |               MIG M. |
-|=========================================+======================+======================|
-|   0  NVIDIA A10G                    On  | 00000000:00:1E.0 Off |                    0 |
-|  0%   26C    P0              58W / 300W |  21216MiB / 23028MiB |      0%      Default |
-|                                         |                      |                  N/A |
-+-----------------------------------------+----------------------+----------------------+
+Tue Jun 11 19:55:25 2024
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.90.07              Driver Version: 550.90.07      CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla M60                      On  |   00000000:00:1E.0 Off |                    0 |
+| N/A   47C    P0             46W /  150W |    7131MiB /   7680MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
 
-+---------------------------------------------------------------------------------------+
-| Processes:                                                                            |
-|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
-|        ID   ID                                                             Usage      |
-|=======================================================================================|
-|    0   N/A  N/A     11339      C   tensorflow_model_server                   21208MiB |
-+---------------------------------------------------------------------------------------+
-|  No running processes found                                                           |
-+---------------------------------------------------------------------------------------+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
 ```
 
 ### Install Container Runtime / Toolkit
