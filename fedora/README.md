@@ -27,7 +27,7 @@ Currently built driver versions are specified in `ci/fedora/.common-ci-fcos.yml`
 The driver container is privileged, and here we choose to launch via podman instead of docker although both work.
 
 ```bash
-$ DRIVER_VERSION=535.154.05 # Check ci/fedora/.common-ci-fcos.yml for latest
+$ DRIVER_VERSION=535.154.05 # Check ci/fedora/.common-ci-fcos.yml for latest driver versions
 $ FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2)
 $ podman run -d --privileged --pid=host \
      -v /run/nvidia:/run/nvidia:shared \
@@ -36,13 +36,14 @@ $ podman run -d --privileged --pid=host \
      registry.gitlab.com/container-toolkit-fcos/driver:${DRIVER_VERSION}-fedora$$FEDORA_VERSION_ID
 ```
 
-Or, on FCOS registering as a systemd unit via an ignition snippet, and using an image with kernel headers pre-installed for faster start up:
+Or, on FCOS registering as a systemd unit via an ignition snippet. In this unit we attempt to pull a driver image matching the running kernel version (with pre-compiled kernel headers), but fall back to a generic Fedora version if one does not exist. Furthermore, we
+mount a single patch file from a host directory that, if detected, will be applied to the generic Fedora version.
 
 ```yaml
 variant: fcos
-version: 1.4.0
-storage:
-  files:
+version: 1.5.0
+systemd:
+  units:
     - name: acme-nvidia-driver.service
       enabled: true
       contents: |
@@ -57,18 +58,31 @@ storage:
         ExecStartPre=-/bin/podman rm nvidia-driver
         ExecStartPre=-setenforce 0
         ExecStartPre=-/bin/mkdir -p /run/nvidia
-        ExecStartPre=-/bin/sh -c 'KERNEL_VERSION=$(/bin/uname -r);FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2); \
-            /bin/podman pull registry.gitlab.com/container-toolkit-fcos/driver:535.154.05-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID'
+        # 5/17/24 - Without the following line the nvidia driver container will crash with no meaningful error message
         ExecStartPre=-/usr/sbin/modprobe video
-        ExecStart=/bin/sh -c 'KERNEL_VERSION=$(/bin/uname -r);FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2); \
-            /bin/podman run --name nvidia-driver \
-                -v /run/nvidia:/run/nvidia:shared \
-                -v /var/log:/var/log \
-                --privileged --pid=host \
-                # No need for network IF using container image with pre-built kernel headers \
-                --network=none \
-                registry.gitlab.com/container-toolkit-fcos/driver:535.154.05-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID \
-                            --accept-license'
+
+        # If there is a kernel-specific image (with pre-compiled kernel headers) then
+        # use it, otherwise fallback to the generic Fedora image mounting any patches that exist.
+        #
+        # Replace registry.gitlab.com/container-toolkit-fcos/driver with the registry name
+        # of your built/published driver images, or perhaps, docker.io/fifofonix/driver
+        ExecStart=/bin/sh -c ' \
+          FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2); \
+          KERNEL_VERSION=$(/bin/uname -r); \
+          if /bin/podman manifest inspect registry.gitlab.com/container-toolkit-fcos/driver:${nvidia_driver_version}-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID > /dev/null; then \
+            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:${nvidia_driver_version}-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID; \
+          else \
+            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:${nvidia_driver_version}-fedora$$FEDORA_VERSION_ID; \
+          fi; \
+          /bin/podman pull $$IMAGE_NAME; \
+          /bin/podman run --name nvidia-driver \
+            -v /run/nvidia:/run/nvidia:shared \
+            -v /var/log:/var/log \
+            -v /var/acme/nvidia-driver-patch:/patch \
+            --privileged \
+            --pid host \
+            $$IMAGE_NAME \
+                --accept-license'
 
         ExecStop=/bin/podman stop nvidia-driver
         Restart=on-failure
@@ -114,18 +128,36 @@ Wed Feb 14 17:58:08 2024
 
 To run a CUDA container that leverages the NVIDIA driver container you now have running, install the separate NVIDIA container runtime and register it with your container runtime system (e.g. docker) following NVIDIA's instructions [here](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
-On FedoraCoreOS you may choose to layer the container toolkit using `rpm-ostree`, and configure your runtime, with an ignition snippet like this (substitute your runtime, docker is shown, but containerd works too for example):
+On FedoraCoreOS you may choose to layer the container toolkit using `rpm-ostree`, and configure your runtime, with an ignition snippet like this (substitute your runtime, containerd is shown, but docker works too for example):
 
 ```yaml
 variant: fcos
-version: 1.4.0
+version: 1.5.0
 storage:
   files:
-    - name: acme-layer-nvidia-container-runtime.service
+    - path: /etc/nvidia-container-runtime/config.toml
+      mode: 0644
+      contents:
+        inline: |
+          [nvidia-container-cli]
+          #debug = "/var/log/nvidia-container-toolkit.log"
+          root = "/run/nvidia/driver"
+          path = "/usr/bin/nvidia-container-cli"
+    # Improvements made in NVIDIA container toolkit 1.15.0 do not yet seem to correctly
+    # support FCOS so we still need to explicitly add the driver path to ld.so.conf
+    - path: /etc/ld.so.conf.d/container-toolkit.conf
+      mode: 0644
+      contents:
+        inline: |
+          /run/nvidia/driver/usr/lib64
+systemd:
+  units:
+    - name: acme-layer-nvidia-container-toolkit.service
       enabled: true
       # We run before `zincati.service` to avoid conflicting rpm-ostree transactions.
       contents: |
         [Unit]
+        Wants=network-online.target
         After=network-online.target
         Before=zincati.service
         ConditionPathExists=!/var/lib/%N.stamp
@@ -138,13 +170,12 @@ storage:
         ExecStartPre=-/bin/sh -c 'curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
             > /etc/yum.repos.d/nvidia-container-toolkit.repo'
         # Perhaps consider pinning the rpm version here depending on change aversion...
-        ExecStart=/usr/bin/rpm-ostree install --idempotent --allow-inactive --apply-live nvidia-container-toolkit
-        ExecStart=/bin/sh -c 'echo "/run/nvidia/driver/usr/lib64" > /etc/ld.so.conf.d/nv.conf; ldconfig'
-        # If we see that the nvidia-ctk is present, then we can configure docker...
+        ExecStart=/usr/bin/rpm-ostree install -y --idempotent --allow-inactive nvidia-container-toolkit
         ExecStart=/bin/sh -c 'if [[ -f /usr/bin/nvidia-ctk ]]; then \
-              /usr/bin/nvidia-ctk runtime configure --runtime=docker --nvidia-set-as-default; \
-              systemctl restart docker; \
+              /usr/bin/nvidia-ctk runtime configure --runtime=containerd --nvidia-set-as-default; \
+              systemctl restart containerd; \
               /bin/touch /var/lib/%N.stamp; fi'
+        ExecStart=/bin/systemctl --no-block reboot
         Restart=on-failure
         RestartSec=60
 
