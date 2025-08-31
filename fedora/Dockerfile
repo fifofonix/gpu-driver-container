@@ -1,6 +1,6 @@
 ARG FEDORA_VERSION=42
 
-FROM nvcr.io/nvidia/cuda:13.0.0-base-ubi8 as build
+FROM nvcr.io/nvidia/cuda:13.0.0-base-ubi9 as build
 
 ARG TARGETARCH
 ARG GOLANG_VERSION
