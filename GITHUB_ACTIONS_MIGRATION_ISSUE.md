@@ -96,7 +96,7 @@ CVE_UPDATES: "curl libc6"
 
 ## Testing Strategy
 
-1. **Feature Branch Testing**: Create `add-github-actions-experiment` branch
+1. **Feature Branch Testing**: Create `fedora-add-github-actions-experiment` branch
 2. **Development Builds**: Test on non-fedora branches first
 3. **Production Builds**: Test fedora branch builds without releases
 4. **Security Scanning**: Verify Trivy integration
