@@ -15,8 +15,21 @@
 
 # Build and push Docker image for FCOS
 # Usage: build_push_image.sh <driver_version> <overwrite_tag> <tag_prefix> <fedora_version> <fedora_uname> <image_base_name> <compile_kernel_modules>
+# Compatible with both GitLab CI and GitHub Actions
 
 set -e
+
+# Detect CI environment for logging and registry authentication
+if [[ -n "${GITLAB_CI}" ]]; then
+    echo "GitLab CI detected"
+    CI_PLATFORM="gitlab"
+elif [[ -n "${GITHUB_ACTIONS}" ]]; then
+    echo "GitHub Actions detected"
+    CI_PLATFORM="github"
+else
+    echo "Unknown CI platform - assuming local/generic environment"
+    CI_PLATFORM="generic"
+fi
 
 DRIVER_VERSION="$1"
 OVERWRITE_TAG="$2"
@@ -100,9 +113,39 @@ if [[ "${COMPILE_KERNEL_MODULES}" == "1" ]]; then
     echo "Pushing ${DOCKER_IMAGE} to registry."
   fi
 
+  # Authenticate to registry based on CI platform (if not already done)
+  case "${CI_PLATFORM}" in
+    "gitlab")
+      if [[ -n "${CI_REGISTRY}" && -n "${CI_REGISTRY_USER}" && -n "${CI_REGISTRY_PASSWORD}" ]]; then
+        docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}" 2>/dev/null || true
+      fi
+      ;;
+    "github")
+      # GitHub Actions authentication should be handled in workflow, but fallback if needed
+      if [[ -n "${GITHUB_TOKEN}" && -n "${GITHUB_ACTOR}" ]]; then
+        echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin 2>/dev/null || true
+      fi
+      ;;
+  esac
+
   docker push -q "${DOCKER_IMAGE}"
 else
   if ! $(docker manifest inspect "${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES}" > /dev/null 2>&1) || [[ "${OVERWRITE_TAG}" == "1" ]]; then
+    # Authenticate to registry based on CI platform (if not already done)
+    case "${CI_PLATFORM}" in
+      "gitlab")
+        if [[ -n "${CI_REGISTRY}" && -n "${CI_REGISTRY_USER}" && -n "${CI_REGISTRY_PASSWORD}" ]]; then
+          docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}" 2>/dev/null || true
+        fi
+        ;;
+      "github")
+        # GitHub Actions authentication should be handled in workflow, but fallback if needed
+        if [[ -n "${GITHUB_TOKEN}" && -n "${GITHUB_ACTOR}" ]]; then
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin 2>/dev/null || true
+        fi
+        ;;
+    esac
+
     echo "Pushing ${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES} to registry."
     docker push -q "${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES}"
   else
