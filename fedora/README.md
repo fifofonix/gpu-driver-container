@@ -27,7 +27,9 @@ Currently built driver versions are specified in `ci/fedora/.common-ci-fcos.yml`
 The driver container is privileged, and here we choose to launch via podman instead of docker although both work.
 
 ```bash
-$ DRIVER_VERSION=550.90.07 # Check ci/fedora/.common-ci-fcos.yml for latest driver versions
+# https://discussion.fedoraproject.org/t/feedback-for-anyone-using-nvidia-with-kernel-6-15-x/156342
+$ sudo rpm-ostree kargs --append=rd.driver.blacklist=nouveau,nova_core --append=modprobe.blacklist=nouveau,nova_core
+$ DRIVER_VERSION=580.65.06 # Check ci/fedora/.common-ci-fcos.yml for latest driver versions
 $ FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2)
 $ podman run -d --privileged --pid=host \
      -v /run/nvidia:/run/nvidia:shared \
@@ -42,6 +44,11 @@ mount a single patch file from a host directory that, if detected, will be appli
 ```yaml
 variant: fcos
 version: 1.5.0
+kernel_arguments:
+  should_exist:
+    # https://discussion.fedoraproject.org/t/feedback-for-anyone-using-nvidia-with-kernel-6-15-x/156342
+    - rd.driver.blacklist=nouveau,nova_core
+    - modprobe.blacklist=nouveau,nova_core
 systemd:
   units:
     - name: acme-nvidia-driver.service
@@ -69,10 +76,10 @@ systemd:
         ExecStart=/bin/sh -c ' \
           FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2); \
           KERNEL_VERSION=$(/bin/uname -r); \
-          if /bin/podman manifest inspect registry.gitlab.com/container-toolkit-fcos/driver:550.90.07-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID > /dev/null; then \
-            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:550.90.07-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID; \
+          if /bin/podman manifest inspect registry.gitlab.com/container-toolkit-fcos/driver:580.65.06-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID > /dev/null; then \
+            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:580.65.06-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID; \
           else \
-            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:550.90.07-fedora$$FEDORA_VERSION_ID; \
+            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:580.65.06-fedora$$FEDORA_VERSION_ID; \
             PATCH_MOUNT="-v /var/acme/nvidia-driver-patch:/patch"
           fi; \
           /bin/podman pull $$IMAGE_NAME; \
@@ -101,22 +108,22 @@ You should be able to step into the driver container and run the `nvidia-smi` to
 $ # Assumes you're running the driver container via podman and named nvidia-driver as above...
 $ podman exec -it nvidia-driver sh
 sh-5.2# nvidia-smi
-Tue Jun 11 19:55:25 2024
+Mon Sep  1 11:18:42 2025
 +-----------------------------------------------------------------------------------------+
-| NVIDIA-SMI 550.90.07              Driver Version: 550.90.07      CUDA Version: 12.4     |
-|-----------------------------------------+------------------------+----------------------+
+| NVIDIA-SMI 580.65.06              Driver Version: 580.65.06      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
 | GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
 | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
-|   0  Tesla M60                      On  |   00000000:00:1E.0 Off |                    0 |
-| N/A   47C    P0             46W /  150W |    7131MiB /   7680MiB |      0%      Default |
+|   0  Tesla T4                       Off |   00000000:00:1E.0 Off |                    0 |
+| N/A   35C    P0             26W /   70W |       0MiB /  15360MiB |      0%      Default |
 |                                         |                        |                  N/A |
 +-----------------------------------------+------------------------+----------------------+
 
 +-----------------------------------------------------------------------------------------+
 | Processes:                                                                              |
-|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
 |        ID   ID                                                               Usage      |
 |=========================================================================================|
 |  No running processes found                                                             |
