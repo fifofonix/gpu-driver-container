@@ -38,7 +38,7 @@
 # Tags == .*fedora$
 #
 # Matching pipelines will cause container image builds on all three
-# fcos runner types and build all DRIVER_VERSIONS.  The images will then be scan-
+# fcos runner types and build ALL_DRIVER_VERSIONS.  The images will then be scan-
 # ned and providing there are no detected vulnerabilities will be pushed to the
 # remote repository defined by RELEASE_REGISTRY_PROJECT.
 #
@@ -126,70 +126,16 @@ stages:
         local _overwrite_tag=$2
         local _tag_prefix=$3
 
-        export DOCKER_IMAGE_WITH_PRECOMPILED_KERNEL_MODULES=${IMAGE_BASE_NAME}:${_tag_prefix}${_driver_version}-${FEDORA_UNAME}-fedora${FEDORA_VERSION}
-        export DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES=${IMAGE_BASE_NAME}:${_tag_prefix}${_driver_version}-fedora${FEDORA_VERSION}
-        echo -e "\033[33mBuilding driver ${_driver_version} for Fedora ${FEDORA_VERSION} (${FEDORA_UNAME}).\033[0m"
-        docker build \
-          --build-arg FEDORA_VERSION=${FEDORA_VERSION} \
-          --build-arg DRIVER_VERSION=${_driver_version} \
-          --build-arg TARGETARCH=$(uname -m) \
-          --build-arg GOLANG_VERSION=${GOLANG_VERSION} \
-          --build-arg DRIVER_BRANCH=$(echo $DRIVER_VERSION | cut -d\. -f1) \
-          --build-arg CUDA_VERSION=${CUDA_VERSION} \
-          --build-arg HTTP_PROXY=${HTTP_PROXY} \
-          --build-arg HTTPS_PROXY=${HTTPS_PROXY} \
-          -t ${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES} fedora
-        if [[ "${COMPILE_KERNEL_MODULES}" == "1" ]]; then
-          if ! $(docker manifest inspect ${DOCKER_IMAGE_WITH_PRECOMPILED_KERNEL_MODULES} > /dev/null 2>&1) || [[ "${_overwrite_tag}" == "1" ]]; then
-            if ((docker run --privileged --pid=host --name build-kernel-modules-${_driver_version} \
-              --env HTTP_PROXY=${HTTP_PROXY} --env HTTPS_PROXY=${HTTPS_PROXY} \
-              --entrypoint nvidia-driver ${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES} update -t builtin 2>&1 ) > /tmp/kernel-module-build.log); then
-              echo "***********************************************************************"
-              echo "Kernel module compilation succeeded.  Below is first 500 build log lines."
-              echo "***********************************************************************"
-              cat /tmp/kernel-module-build.log | grep -Ev "'naked' return found in RETHUNK build|missing int3 after ret" | \
-                grep -v "'naked' return found in MITIGATION_RETHUNK build" | head -n 100 && true
-              echo "...suppressed log lines..."
-              cat /tmp/kernel-module-build.log | grep -Ev "'naked' return found in RETHUNK build|missing int3 after ret" | \
-                grep -v "'naked' return found in MITIGATION_RETHUNK build" | tail -n 500 && true
-              echo "***********************************************************************"
-              echo "Kernel module compilation succeeded.  Above is last 500 build log lines."
-              echo "***********************************************************************"
-              docker commit -m '"Compile Linux kernel modules version ${FEDORA_UNAME} for NVIDIA driver version ${_driver_version}"' \
-                --change='ENTRYPOINT ["nvidia-driver", "init"]' -c 'ENV HTTP_PROXY=' -c 'ENV HTTPS_PROXY=' \
-                  build-kernel-modules-${_driver_version} ${DOCKER_IMAGE_WITH_PRECOMPILED_KERNEL_MODULES}
-              export DOCKER_IMAGE=${DOCKER_IMAGE_WITH_PRECOMPILED_KERNEL_MODULES}
-              echo "Pushing ${DOCKER_IMAGE} with compiled kernel interface modules."
-            else
-              echo "***********************************************************************"
-              echo "Kernel module compilation failed.  Below is first 500 lines of log only."
-              echo "***********************************************************************"
-              cat /tmp/kernel-module-build.log | grep -Ev "'naked' return found in RETHUNK build|missing int3 after ret" | \
-                grep -v "'naked' return found in MITIGATION_RETHUNK build" | head -n 100 && true
-              echo "...suppressed log lines..."
-              cat /tmp/kernel-module-build.log | grep -Ev "'naked' return found in RETHUNK build|missing int3 after ret" | \
-                grep -v "'naked' return found in MITIGATION_RETHUNK build" | tail -n 500 && true
-              echo "***********************************************************************"
-              echo "Kernel module compilation failed.  Above is last 500 lines of log only."
-              echo "***********************************************************************"
-              export DOCKER_IMAGE=${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES}
-              echo "Pushing ${DOCKER_IMAGE} without compiled kernel interface modules."
-            fi
-          else
-            export DOCKER_IMAGE=${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES}
-            echo "Pushing ${DOCKER_IMAGE} to internal gitlab repository."
-          fi
-          docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
-          docker push -q ${DOCKER_IMAGE}
-        else
-          if ! $(docker manifest inspect ${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES} > /dev/null 2>&1) || [[ "${_overwrite_tag}" == "1" ]]; then
-              docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
-              echo "Pushing ${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES} to internal gitlab repository."
-              docker push -q ${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES}
-          else
-            echo "Skipping push of ${DOCKER_IMAGE_NO_PRECOMPILED_KERNEL_MODULES} to internal gitlab repository."
-          fi
-        fi
+        # Use shared build script
+        sh "${CI_PROJECT_DIR}/ci/fedora/build_push_image.sh" \
+          "${_driver_version}" \
+          "${_overwrite_tag}" \
+          "${_tag_prefix}" \
+          "${FEDORA_VERSION}" \
+          "${FEDORA_UNAME}" \
+          "${IMAGE_BASE_NAME}" \
+          "${COMPILE_KERNEL_MODULES}" \
+          "${KERNEL_TYPE}"
       }
 
 .build-push-script: &build-push-script
@@ -202,19 +148,12 @@ build-push-next-one-only:
   script:
     - *build_push_fn-script
     # Here we pass in the short git sha which gets suffixed to the built image.
-    - mkdir -p error-logs
-    - |
-      for driver_version in ${DRIVER_VERSION}; do
-        build_push_fn ${driver_version} $OVERWRITE_TAGS ${CI_COMMIT_SHORT_SHA}-;
-        mv /tmp/kernel-module-build.log ./error-logs/kernel-module-build-${driver_version}.log
-      done
+    - for driver_version in ${DRIVER_VERSION}; do build_push_fn ${driver_version} $OVERWRITE_TAGS ${CI_COMMIT_SHORT_SHA}-; done
   tags:
     - fcos-next
   rules:
     # Only run on branches (not tags) which do not start with fedora
     - if: $CI_COMMIT_REF_NAME !~ /^fedora/ && $CI_COMMIT_TAG == null
-  artifacts:
-    paths: [error-logs]
 
 build-push:
   stage: build
@@ -244,8 +183,8 @@ build-push:
   dependencies: []
   before_script:
     - !reference [.common, before_script]
-    - if ! [[ -z ${HTTP_PROXY} ]]; then sudo -- sh -c 'echo Acquire::http::Proxy \"'${HTTP_PROXY}'\"\; >> /etc/apt/apt.conf.d/proxy.conf'; fi
-    - if ! [[ -z ${HTTPS_PROXY} ]]; then sudo -- sh -c 'echo Acquire::https::Proxy \"'${HTTPS_PROXY}'\"\; >> /etc/apt/apt.conf.d/proxy.conf'; fi
+    - if ! [ -z ${HTTP_PROXY} ]; then sudo -- sh -c 'echo Acquire::http::Proxy \"'${HTTP_PROXY}'\"\; >> /etc/apt/apt.conf.d/proxy.conf'; fi
+    - if ! [ -z ${HTTPS_PROXY} ]; then sudo -- sh -c 'echo Acquire::https::Proxy \"'${HTTPS_PROXY}'\"\; >> /etc/apt/apt.conf.d/proxy.conf'; fi
     - sudo apt-get -qy update > /dev/null
     - sudo apt-get -qy install jq > /dev/null
     - mkdir driver-artifacts
@@ -253,19 +192,14 @@ build-push:
       function scan_fn() {
         local _driver_version=$1
         local _tag_prefix=$2
-        export DOCKER_TAG=${_tag_prefix}${_driver_version}-${FEDORA_UNAME}-fedora${FEDORA_VERSION}
-        export CS_IMAGE=${IMAGE_BASE_NAME}:${DOCKER_TAG}
-        # Try to scan the kernel-specific tag...if it fails go to non-kernel-specific tag...
-        if ! (gtcs scan); then
-          export DOCKER_TAG=${_tag_prefix}${_driver_version}-fedora${FEDORA_VERSION}
-          export CS_IMAGE=${IMAGE_BASE_NAME}:${DOCKER_TAG}
-          gtcs scan
-        fi
-        cat gl-container-scanning-report.json | jq '.vulnerabilities[].severity' | sort | uniq -c
-        if [[ $(cat gl-container-scanning-report.json | jq '.vulnerabilities | any') == 'true' ]]; then
-          exit 1
-        fi
-        mv gl-container-scanning-report.json driver-artifacts/gl-container-scanning-report-${_driver_version}.json
+
+        # Use shared scan script with explicit sh
+        sh ${CI_PROJECT_DIR}/ci/fedora/scan_image.sh \
+          "${_driver_version}" \
+          "${_tag_prefix}" \
+          "${FEDORA_VERSION}" \
+          "${FEDORA_UNAME}" \
+          "${IMAGE_BASE_NAME}"
       }
   script:
     - for driver_version in ${DRIVER_VERSIONS:-${DRIVER_VERSION}}; do scan_fn ${driver_version};done
@@ -318,18 +252,16 @@ scan-stable:
       local _driver_version=$1
       local _overwrite_remote_tag=${2:-${OVERWRITE_REMOTE_TAGS}}
       local _tag_prefix=$3
-      export DOCKER_TAG=${_tag_prefix}${_driver_version}-${FEDORA_UNAME}-fedora${FEDORA_VERSION}
-      if ! (docker manifest inspect ${IMAGE_BASE_NAME}:${DOCKER_TAG} > /dev/null 2>&1); then
-          export DOCKER_TAG=${_tag_prefix}${_driver_version}-fedora${FEDORA_VERSION}
-      fi
-      docker pull -q ${IMAGE_BASE_NAME}:${DOCKER_TAG}
-      docker tag ${IMAGE_BASE_NAME}:${DOCKER_TAG} ${RELEASE_REGISTRY_PROJECT}:${DOCKER_TAG}
-      if ! $(docker manifest inspect ${RELEASE_REGISTRY_PROJECT}:${DOCKER_TAG} > /dev/null 2>&1) || [[ ${_overwrite_remote_tag} -eq 1 ]]; then
-        echo "Pushing ${RELEASE_REGISTRY_PROJECT}:${DOCKER_TAG} to remote repository."
-        docker push -q ${RELEASE_REGISTRY_PROJECT}:${DOCKER_TAG}
-      else
-        echo "Skipping push of ${RELEASE_REGISTRY_PROJECT}:${DOCKER_TAG} to remote repository."
-      fi
+
+      # Use shared release script with explicit sh
+      sh ${CI_PROJECT_DIR}/ci/fedora/release_image.sh \
+        "${_driver_version}" \
+        "${_overwrite_remote_tag}" \
+        "${_tag_prefix}" \
+        "${FEDORA_VERSION}" \
+        "${FEDORA_UNAME}" \
+        "${IMAGE_BASE_NAME}" \
+        "${RELEASE_REGISTRY_PROJECT}"
     }
 
 .common-release:
