@@ -58,7 +58,7 @@ jobs:
   # Development build for non-fedora branches (single build on next)
   build-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
-    runs-on: [self-hosted, arc-fcos-next]
+    runs-on: [arc-fcos-next]
     container:
       image: docker:27.3
       options: --privileged
@@ -109,7 +109,7 @@ jobs:
   # Production builds for fedora branches/tags (all streams)
   build-prod:
     if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
-    runs-on: ${{ fromJSON(format('["self-hosted", "arc-fcos-{0}"]', matrix.stream)) }}
+    runs-on: ${{ fromJSON(format('["arc-fcos-{0}"]', matrix.stream)) }}
     container:
       image: docker:27.3
       options: --privileged
@@ -163,7 +163,7 @@ jobs:
   scan-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     needs: build-dev
-    runs-on: [self-hosted, arc-fcos-next]
+    runs-on: [arc-fcos-next]
     container:
       image: registry.gitlab.com/security-products/container-scanning:7
     steps:
@@ -198,7 +198,7 @@ jobs:
   scan-prod:
     if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
     needs: build-prod
-    runs-on: ${{ fromJSON(format('["self-hosted", "arc-fcos-{0}"]', matrix.stream)) }}
+    runs-on: ${{ fromJSON(format('["arc-fcos-{0}"]', matrix.stream)) }}
     container:
       image: registry.gitlab.com/security-products/container-scanning:7
     strategy:
@@ -238,7 +238,7 @@ jobs:
   release:
     if: ${{ endsWith(github.ref, 'fedora') }}
     needs: [scan-prod]
-    runs-on: ${{ fromJSON(format('["self-hosted", "arc-fcos-{0}"]', matrix.stream)) }}
+    runs-on: ${{ fromJSON(format('["arc-fcos-{0}"]', matrix.stream)) }}
     container:
       image: docker:27.3
       options: --privileged
@@ -284,7 +284,7 @@ jobs:
   release-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     needs: [scan-dev]
-    runs-on: [self-hosted, arc-fcos-next]
+    runs-on: [arc-fcos-next]
     container:
       image: docker:27.3
       options: --privileged
