@@ -24,6 +24,7 @@ on:
   push:
     branches:
       - 'fedora**'
+      - '*fedora'
     tags:
       - '*fedora'
   pull_request:
