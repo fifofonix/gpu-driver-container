@@ -58,6 +58,14 @@ env:
 
 jobs:
   # Development build for non-fedora branches (single build on next)
+  simple:
+    runs-on: self-hosted
+    steps:
+      - name: Hello World
+        run: |
+          echo Hello World
+          echo Goodbye World
+
   build-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     runs-on: self-hosted
