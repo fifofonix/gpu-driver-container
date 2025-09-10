@@ -16,7 +16,7 @@
 #
 # This workflow is designed for FedoraCoreOS container images with pre-built kernel
 # packages. It uses self-hosted ARC runners tagged with:
-# - pdm-k1-arc-fcos-next, pdm-k1-arc-fcos-testing, pdm-k1-arc-fcos-stable
+# - self-hosted, pdm-k1-arc-fcos-testing, pdm-k1-arc-fcos-stable
 
 name: FedoraCoreOS Driver Build
 
@@ -59,7 +59,7 @@ jobs:
   # Development build for non-fedora branches (single build on next)
   build-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
-    runs-on: [pdm-k1-arc-fcos-next]
+    runs-on: [self-hosted]
     container:
       image: docker:27.3
       options: --privileged
@@ -164,7 +164,7 @@ jobs:
   scan-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     needs: build-dev
-    runs-on: [pdm-k1-arc-fcos-next]
+    runs-on: [self-hosted]
     container:
       image: registry.gitlab.com/security-products/container-scanning:7
     steps:
@@ -285,7 +285,7 @@ jobs:
   release-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     needs: [scan-dev]
-    runs-on: [pdm-k1-arc-fcos-next]
+    runs-on: [self-hosted]
     container:
       image: docker:27.3
       options: --privileged
