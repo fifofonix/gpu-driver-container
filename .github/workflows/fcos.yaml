@@ -59,7 +59,7 @@ jobs:
   # Development build for non-fedora branches (single build on next)
   build-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
-    runs-on: [self-hosted]
+    runs-on: self-hosted
     container:
       image: docker:27.3
       options: --privileged
@@ -164,7 +164,7 @@ jobs:
   scan-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     needs: build-dev
-    runs-on: [self-hosted]
+    runs-on: self-hosted
     container:
       image: registry.gitlab.com/security-products/container-scanning:7
     steps:
@@ -285,7 +285,7 @@ jobs:
   release-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     needs: [scan-dev]
-    runs-on: [self-hosted]
+    runs-on: self-hosted
     container:
       image: docker:27.3
       options: --privileged
