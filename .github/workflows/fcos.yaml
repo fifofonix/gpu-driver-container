@@ -14,8 +14,9 @@
 
 # Fedora CoreOS (FCOS) Specific GitHub Actions Workflow
 #
-# This workflow is designed for FedoraCoreOS container images with pre-built kernel packages.
-# It uses self-hosted runners tagged with: pdm-k1-arc-fcos-next, pdm-k1-arc-fcos-testing, pdm-k1-arc-fcos-stable
+# This workflow is designed for FedoraCoreOS container images with pre-built kernel
+# packages. It uses self-hosted ARC runners tagged with:
+# - pdm-k1-arc-fcos-next, pdm-k1-arc-fcos-testing, pdm-k1-arc-fcos-stable
 
 name: FedoraCoreOS Driver Build
 
