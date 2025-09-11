@@ -59,7 +59,7 @@ env:
 jobs:
   # Development build for non-fedora branches (single build on next)
   simple:
-    runs-on: pdm-k1-arc-fcos-next
+    runs-on: pdm-k2-arc-fcos-next
     steps:
       - name: Hello World
         run: |
