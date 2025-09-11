@@ -61,13 +61,13 @@ jobs:
   build-dev:
     if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     runs-on: pdm-k2-arc-fcos-next
-    container:
-      image: docker:27.3
-      options: --privileged
-    services:
-      docker:
-        image: docker:27.3-dind
-        options: --privileged
+    # container:
+    #   image: docker:27.3
+    #   options: --privileged
+    # services:
+    #   docker:
+    #     image: docker:27.3-dind
+    #     options: --privileged
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
