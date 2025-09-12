@@ -61,7 +61,7 @@ jobs:
   build-dev:
     # if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
     if: ${{ endsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' }}
-    runs-on: fcos-next
+    runs-on: pdm-k2-arc-fcos-next
     # container:
     #   image: docker:27.3
     #   options: --privileged
