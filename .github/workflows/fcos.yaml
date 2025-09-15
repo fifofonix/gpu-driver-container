@@ -95,6 +95,13 @@ jobs:
             "$IMAGE_BASE_NAME" \
             "$COMPILE_KERNEL_MODULES"
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: '$COMMIT_SHORT_SHA-$IMAGE_BASE_NAME:$DRIVER_VERSION-${FEDORA_UNAME}-fedora${FEDORA_VERSION}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
