@@ -96,9 +96,9 @@ jobs:
             "$COMPILE_KERNEL_MODULES"
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: '$COMMIT_SHORT_SHA-$IMAGE_BASE_NAME:$DRIVER_VERSION-${FEDORA_UNAME}-fedora${FEDORA_VERSION}'
+          image-ref: "${COMMIT_SHORT_SHA}-${IMAGE_BASE_NAME}:${DRIVER_VERSION}-${FEDORA_UNAME}-fedora${FEDORA_VERSION}"
           format: 'sarif'
           output: 'trivy-results.sarif'
 
