@@ -25,7 +25,7 @@ on:
     branches:
       - 'fedora**'
       - '*fedora'
-      - '*fedora-dev'
+      - '*fedora-wip'
     tags:
       - '*fedora'
   pull_request:
@@ -59,8 +59,8 @@ env:
 
 jobs:
   # Development build for non-fedora branches (single build on next)
-  build-dev:
-    if: ${{ endsWith(github.ref_name, 'fedora-dev') && github.event_name != 'schedule' }}
+  build-wip:
+    if: ${{ endsWith(github.ref_name, 'fedora-wip') && github.event_name != 'schedule' }}
     runs-on: pdm-k1-arc-fcos-next
     steps:
       - name: Checkout code
@@ -103,62 +103,62 @@ jobs:
           retention-days: 7
 
   # # Production builds for fedora branches/tags (all streams)
-  # build-prod:
-  #   if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
-  #   runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
-  #   container:
-  #     image: docker:27.3
-  #     options: --privileged
-  #   services:
-  #     docker:
-  #       image: docker:27.3-dind
-  #       options: --privileged
-  #   strategy:
-  #     matrix:
-  #       stream: [next, testing, stable]
-  #     fail-fast: false
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
+  build:
+    if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
+    runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
+    container:
+      image: docker:27.3
+      options: --privileged
+    services:
+      docker:
+        image: docker:27.3-dind
+        options: --privileged
+    strategy:
+      matrix:
+        stream: [next, testing, stable]
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Set environment variables
-  #       run: |
-  #         echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
-  #         echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
-  #         echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
+      - name: Set environment variables
+        run: |
+          echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
+          echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
+          echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
 
-  #     - name: Login to GitHub Container Registry
-  #       uses: docker/login-action@v3
-  #       with:
-  #         registry: ghcr.io
-  #         username: ${{ github.actor }}
-  #         password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-  #     - name: Build and push production images
-  #       run: |
-  #         for driver_version in $DRIVER_VERSIONS; do
-  #           ./ci/fedora/build_push_image.sh \
-  #             "$driver_version" \
-  #             "$OVERWRITE_TAGS" \
-  #             "" \
-  #             "$FEDORA_VERSION" \
-  #             "$FEDORA_UNAME" \
-  #             "$IMAGE_BASE_NAME" \
-  #             "$COMPILE_KERNEL_MODULES"
-  #         done
+      - name: Build and push production images
+        run: |
+          for driver_version in $DRIVER_VERSIONS; do
+            ./ci/fedora/build_push_image.sh \
+              "$driver_version" \
+              "$OVERWRITE_TAGS" \
+              "" \
+              "$FEDORA_VERSION" \
+              "$FEDORA_UNAME" \
+              "$IMAGE_BASE_NAME" \
+              "$COMPILE_KERNEL_MODULES"
+          done
 
-  #     - name: Upload build logs
-  #       if: always()
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: prod-build-logs-${{ matrix.stream }}
-  #         path: /tmp/kernel-module-build*.log
-  #         retention-days: 7
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-build-logs-${{ matrix.stream }}
+          path: /tmp/kernel-module-build*.log
+          retention-days: 7
 
   # Security scanning
-  scan-dev:
-    if: ${{ endsWith(github.ref_name, 'fedora-dev') && github.event_name != 'schedule' }}
-    needs: build-dev
+  scan-wip:
+    if: ${{ endsWith(github.ref_name, 'fedora-wip') && github.event_name != 'schedule' }}
+    needs: build-wip
     runs-on: pdm-k1-arc-fcos-next
     container:
       image: registry.gitlab.com/security-products/container-scanning:7
@@ -191,49 +191,49 @@ jobs:
           path: driver-artifacts/
           retention-days: 30
 
-  # scan-prod:
-  #   if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
-  #   needs: build-prod
-  #   runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
-  #   container:
-  #     image: registry.gitlab.com/security-products/container-scanning:7
-  #   strategy:
-  #     matrix:
-  #       stream: [next, testing, stable]
-  #     fail-fast: false
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
+  scan:
+    if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
+    needs: build
+    runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
+    container:
+      image: registry.gitlab.com/security-products/container-scanning:7
+    strategy:
+      matrix:
+        stream: [next, testing, stable]
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Set environment variables
-  #       run: |
-  #         echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
-  #         echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
-  #         echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
+      - name: Set environment variables
+        run: |
+          echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
+          echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
+          echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
 
-  #     - name: Scan production images
-  #       run: |
-  #         for driver_version in $DRIVER_VERSIONS; do
-  #           ./ci/fedora/scan_image.sh \
-  #             "$driver_version" \
-  #             "" \
-  #             "$FEDORA_VERSION" \
-  #             "$FEDORA_UNAME" \
-  #             "$IMAGE_BASE_NAME"
-  #         done
+      - name: Scan production images
+        run: |
+          for driver_version in $DRIVER_VERSIONS; do
+            ./ci/fedora/scan_image.sh \
+              "$driver_version" \
+              "" \
+              "$FEDORA_VERSION" \
+              "$FEDORA_UNAME" \
+              "$IMAGE_BASE_NAME"
+          done
 
-  #     - name: Upload scan results
-  #       if: always()
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: prod-scan-results-${{ matrix.stream }}
-  #         path: driver-artifacts/
-  #         retention-days: 30
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-scan-results-${{ matrix.stream }}
+          path: driver-artifacts/
+          retention-days: 30
 
   # Development release (internal registry test)
-  release-dev:
-    if: ${{ endsWith(github.ref_name, 'fedora-dev') && github.event_name != 'schedule' }}
-    needs: scan-dev
+  release-wip:
+    if: ${{ endsWith(github.ref_name, 'fedora-wip') && github.event_name != 'schedule' }}
+    needs: scan-wip
     runs-on: pdm-k1-arc-fcos-next
     container:
       image: docker:27.3
@@ -275,7 +275,7 @@ jobs:
   # # Release only on tags ending with 'fedora'
   # release:
   #   if: ${{ endsWith(github.ref, 'fedora') }}
-  #   needs: [scan-prod]
+  #   needs: [scan]
   #   runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
   #   container:
   #     image: docker:27.3
