@@ -95,10 +95,13 @@ jobs:
             "$IMAGE_BASE_NAME" \
             "$COMPILE_KERNEL_MODULES"
 
+            echo "{{ env.NAME }}-{{ env.IMAGE_BASE_NAME }}:{{ env.DRIVER_VERSION }}-{{ env.FEDORA_UNAME }}-fedora{{ env.FEDORA_VERSION }}"
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: "${COMMIT_SHORT_SHA}-${IMAGE_BASE_NAME}:${DRIVER_VERSION}-${FEDORA_UNAME}-fedora${FEDORA_VERSION}"
+          # image-ref: "${COMMIT_SHORT_SHA}-${IMAGE_BASE_NAME}:${DRIVER_VERSION}-${FEDORA_UNAME}-fedora${FEDORA_VERSION}"
+          image-ref: "{{ env.NAME }}-{{ env.IMAGE_BASE_NAME }}:{{ env.DRIVER_VERSION }}-{{ env.FEDORA_UNAME }}-fedora{{ env.FEDORA_VERSION }}"
           format: 'sarif'
           output: 'trivy-results.sarif'
 
