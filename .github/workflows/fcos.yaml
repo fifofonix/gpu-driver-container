@@ -86,6 +86,8 @@ jobs:
           # Use only the latest driver version for dev builds
           DRIVER_VERSION=$(echo $DRIVER_VERSIONS | awk '{print $NF}')
 
+          echo ${{ env.COMMIT_SHORT_SHA }}-${{ env.IMAGE_BASE_NAME }}:${{ env.DRIVER_VERSION }}-${{ env.FEDORA_UNAME }}-fedora${{ env.FEDORA_VERSION }}
+
           ./ci/fedora/build_push_image.sh \
             "$DRIVER_VERSION" \
             "$OVERWRITE_TAGS" \
@@ -94,8 +96,6 @@ jobs:
             "$FEDORA_UNAME" \
             "$IMAGE_BASE_NAME" \
             "$COMPILE_KERNEL_MODULES"
-
-            echo "{{ env.NAME }}-{{ env.IMAGE_BASE_NAME }}:{{ env.DRIVER_VERSION }}-{{ env.FEDORA_UNAME }}-fedora{{ env.FEDORA_VERSION }}"
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.33.1
