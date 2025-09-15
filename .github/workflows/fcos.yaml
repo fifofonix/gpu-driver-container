@@ -107,13 +107,6 @@ jobs:
   build:
     if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
     runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
-    container:
-      image: docker:27.3
-      options: --privileged
-    services:
-      docker:
-        image: docker:27.3-dind
-        options: --privileged
     strategy:
       matrix:
         stream: [next, testing, stable]
@@ -161,8 +154,6 @@ jobs:
     if: ${{ endsWith(github.ref_name, 'fedora-wip') && github.event_name != 'schedule' }}
     needs: build-wip
     runs-on: pdm-k1-arc-fcos-next
-    container:
-      image: registry.gitlab.com/security-products/container-scanning:7
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -196,8 +187,6 @@ jobs:
     if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
     needs: build
     runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
-    container:
-      image: registry.gitlab.com/security-products/container-scanning:7
     strategy:
       matrix:
         stream: [next, testing, stable]
