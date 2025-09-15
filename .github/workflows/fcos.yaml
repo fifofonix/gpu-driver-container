@@ -56,6 +56,7 @@ env:
   COMPILE_KERNEL_MODULES: ${{ github.event.inputs.compile_kernel_modules || '1' }}
   OVERWRITE_REMOTE_TAGS: ${{ github.event.inputs.overwrite_remote_tags || '0' }}
   OVERWRITE_TAGS: "1"
+  ACTIONS_STEP_DEBUG: true
 
 jobs:
   # Development build for non-fedora branches (single build on next)
