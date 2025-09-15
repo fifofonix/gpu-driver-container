@@ -59,16 +59,8 @@ env:
 jobs:
   # Development build for non-fedora branches (single build on next)
   build-dev:
-    # if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
-    if: ${{ endsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' }}
-    runs-on: pdm-k2-arc-fcos-next
-    # container:
-    #   image: docker:27.3
-    #   options: --privileged
-    # services:
-    #   docker:
-    #     image: docker:27.3-dind
-    #     options: --privileged
+    if: ${{ endsWith(github.ref_name, 'fedora-dev') && github.event_name != 'schedule' }}
+    runs-on: pdm-k1-arc-fcos-next
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -162,41 +154,41 @@ jobs:
   #         path: /tmp/kernel-module-build*.log
   #         retention-days: 7
 
-  # # Security scanning
-  # scan-dev:
-  #   if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
-  #   needs: build-dev
-  #   runs-on: self-hosted
-  #   container:
-  #     image: registry.gitlab.com/security-products/container-scanning:7
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
+  # Security scanning
+  scan-dev:
+    if: ${{ endsWith(github.ref_name, 'fedora-dev') && github.event_name != 'schedule' }}
+    needs: build-dev
+    runs-on: pdm-k1-arc-fcos-next
+    container:
+      image: registry.gitlab.com/security-products/container-scanning:7
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Set environment variables
-  #       run: |
-  #         echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
-  #         echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
-  #         echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
-  #         echo "COMMIT_SHORT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
+      - name: Set environment variables
+        run: |
+          echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
+          echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
+          echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
+          echo "COMMIT_SHORT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
 
-  #     - name: Scan development image
-  #       run: |
-  #         DRIVER_VERSION=$(echo $DRIVER_VERSIONS | awk '{print $NF}')
-  #         ./ci/fedora/scan_image.sh \
-  #           "$DRIVER_VERSION" \
-  #           "${COMMIT_SHORT_SHA}-" \
-  #           "$FEDORA_VERSION" \
-  #           "$FEDORA_UNAME" \
-  #           "$IMAGE_BASE_NAME"
+      - name: Scan development image
+        run: |
+          DRIVER_VERSION=$(echo $DRIVER_VERSIONS | awk '{print $NF}')
+          ./ci/fedora/scan_image.sh \
+            "$DRIVER_VERSION" \
+            "${COMMIT_SHORT_SHA}-" \
+            "$FEDORA_VERSION" \
+            "$FEDORA_UNAME" \
+            "$IMAGE_BASE_NAME"
 
-  #     - name: Upload scan results
-  #       if: always()
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: dev-scan-results
-  #         path: driver-artifacts/
-  #         retention-days: 30
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-scan-results
+          path: driver-artifacts/
+          retention-days: 30
 
   # scan-prod:
   #   if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
@@ -236,6 +228,48 @@ jobs:
   #         name: prod-scan-results-${{ matrix.stream }}
   #         path: driver-artifacts/
   #         retention-days: 30
+
+  # Development release (internal registry test)
+  release-dev:
+    if: ${{ endsWith(github.ref_name, 'fedora-dev') && github.event_name != 'schedule' }}
+    needs: scan-dev
+    runs-on: pdm-k1-arc-fcos-next
+    container:
+      image: docker:27.3
+      options: --privileged
+    services:
+      docker:
+        image: docker:27.3-dind
+        options: --privileged
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
+          echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
+          echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
+          echo "COMMIT_SHORT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Development release (test)
+        run: |
+          DRIVER_VERSION=$(echo $DRIVER_VERSIONS | awk '{print $NF}')
+          ./ci/fedora/release_image.sh \
+            "$DRIVER_VERSION" \
+            "$OVERWRITE_REMOTE_TAGS" \
+            "${COMMIT_SHORT_SHA}-" \
+            "$FEDORA_VERSION" \
+            "$FEDORA_UNAME" \
+            "$IMAGE_BASE_NAME" \
+            "$IMAGE_BASE_NAME"
 
   # # Release only on tags ending with 'fedora'
   # release:
@@ -283,44 +317,3 @@ jobs:
   #             "$RELEASE_REGISTRY_PROJECT"
   #         done
 
-  # # Development release (internal registry test)
-  # release-dev:
-  #   if: ${{ !startsWith(github.ref_name, 'fedora') && github.event_name != 'schedule' && !endsWith(github.ref, 'fedora') }}
-  #   needs: [scan-dev]
-  #   runs-on: self-hosted
-  #   container:
-  #     image: docker:27.3
-  #     options: --privileged
-  #   services:
-  #     docker:
-  #       image: docker:27.3-dind
-  #       options: --privileged
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-
-  #     - name: Set environment variables
-  #       run: |
-  #         echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
-  #         echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
-  #         echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
-  #         echo "COMMIT_SHORT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
-
-  #     - name: Login to GitHub Container Registry
-  #       uses: docker/login-action@v3
-  #       with:
-  #         registry: ghcr.io
-  #         username: ${{ github.actor }}
-  #         password: ${{ secrets.GITHUB_TOKEN }}
-
-  #     - name: Development release (test)
-  #       run: |
-  #         DRIVER_VERSION=$(echo $DRIVER_VERSIONS | awk '{print $NF}')
-  #         ./ci/fedora/release_image.sh \
-  #           "$DRIVER_VERSION" \
-  #           "$OVERWRITE_REMOTE_TAGS" \
-  #           "${COMMIT_SHORT_SHA}-" \
-  #           "$FEDORA_VERSION" \
-  #           "$FEDORA_UNAME" \
-  #           "$IMAGE_BASE_NAME" \
-  #           "$IMAGE_BASE_NAME"
