@@ -60,7 +60,7 @@ env:
 
 jobs:
   # Development build for non-fedora branches (single build on next)
-  build-wip:
+  build-scan-wip:
     if: ${{ endsWith(github.ref_name, 'fedora-wip') && github.event_name != 'schedule' }}
     runs-on: pdm-k1-arc-fcos-next
     steps:
@@ -154,40 +154,6 @@ jobs:
           path: /tmp/kernel-module-build*.log
           retention-days: 7
 
-  # Security scanning
-  scan-wip:
-    if: ${{ endsWith(github.ref_name, 'fedora-wip') && github.event_name != 'schedule' }}
-    needs: build-wip
-    runs-on: pdm-k1-arc-fcos-next
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set environment variables
-        run: |
-          echo "FEDORA_VERSION=$(uname -r | sed -r 's/^.*fc([0-9][0-9]).*/\1/')" >> $GITHUB_ENV
-          echo "FEDORA_UNAME=$(uname -r)" >> $GITHUB_ENV
-          echo "IMAGE_BASE_NAME=ghcr.io/${{ github.repository_owner }}/driver" >> $GITHUB_ENV
-          echo "COMMIT_SHORT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
-
-      - name: Scan development image
-        run: |
-          DRIVER_VERSION=$(echo $DRIVER_VERSIONS | awk '{print $NF}')
-          ./ci/fedora/scan_image.sh \
-            "$DRIVER_VERSION" \
-            "${COMMIT_SHORT_SHA}-" \
-            "$FEDORA_VERSION" \
-            "$FEDORA_UNAME" \
-            "$IMAGE_BASE_NAME"
-
-      - name: Upload scan results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dev-scan-results
-          path: driver-artifacts/
-          retention-days: 30
-
   scan:
     if: ${{ startsWith(github.ref_name, 'fedora') || endsWith(github.ref, 'fedora') || github.event_name == 'schedule' }}
     needs: build
@@ -228,7 +194,7 @@ jobs:
   # Development release (internal registry test)
   release-wip:
     if: ${{ endsWith(github.ref_name, 'fedora-wip') && github.event_name != 'schedule' }}
-    needs: scan-wip
+    needs: build-scan-wip
     runs-on: pdm-k1-arc-fcos-next
     container:
       image: docker:27.3
