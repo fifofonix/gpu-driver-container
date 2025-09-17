@@ -92,6 +92,12 @@ jobs:
             "$FEDORA_UNAME" \
             "$IMAGE_BASE_NAME" \
             "$COMPILE_KERNEL_MODULES"
+        continue-on-error: true
+
+      - name: Sleep 900
+        run: |
+          echo Sleeping 900 seconds
+          sleep 900
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.33.1
@@ -196,13 +202,6 @@ jobs:
     if: ${{ endsWith(github.ref_name, 'fedora-wip') && github.event_name != 'schedule' }}
     needs: build-scan-wip
     runs-on: pdm-k1-arc-fcos-next
-    container:
-      image: docker:27.3
-      options: --privileged
-    services:
-      docker:
-        image: docker:27.3-dind
-        options: --privileged
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -238,13 +237,6 @@ jobs:
   #   if: ${{ endsWith(github.ref, 'fedora') }}
   #   needs: [scan]
   #   runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
-  #   container:
-  #     image: docker:27.3
-  #     options: --privileged
-  #   services:
-  #     docker:
-  #       image: docker:27.3-dind
-  #       options: --privileged
   #   strategy:
   #     matrix:
   #       stream: [next, testing, stable]
