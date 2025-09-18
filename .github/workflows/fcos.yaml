@@ -113,6 +113,10 @@ jobs:
           severity: 'CRITICAL,HIGH'
           timeout: 30m0s
 
+      - name: Build and push development image
+        run: |
+          jq '.Results[].Vulnerabilities[].Severity' trivy-report.json | sort | uniq -c
+
       - name: Upload Vulnerability Scan Results
         uses: actions/upload-artifact@v4
         with:
