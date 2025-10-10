@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
     strategy:
       matrix:
-        stream: [next, testing] # Disable stable for right now pending commissioning of runners
+        stream: [next, testing, stable]
       fail-fast: false
     steps:
       - name: Checkout code
@@ -78,7 +78,7 @@ jobs:
         if: ${{ github.event_name == 'schedule' }}
         uses: actions/checkout@v4
         with:
-          ref: fedora-rebasing-main
+          ref: fedora-rebased-main
 
       - name: Set environment variables
         run: |
@@ -141,7 +141,7 @@ jobs:
     runs-on: ${{ fromJSON(format('["pdm-k1-arc-fcos-{0}"]', matrix.stream)) }}
     strategy:
       matrix:
-        stream: [next, testing] # Disable stable for right now pending commissioning of runners
+        stream: [next, testing, stable]
       fail-fast: false
     steps:
       - name: Checkout code
@@ -152,7 +152,7 @@ jobs:
         if: ${{ github.event_name == 'schedule' }}
         uses: actions/checkout@v4
         with:
-          ref: fedora-rebasing-main
+          ref: fedora-rebased-main
 
       - name: Set environment variables
         run: |
