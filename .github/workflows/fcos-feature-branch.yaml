@@ -43,9 +43,9 @@ on:
 
 env:
   # Driver versions to build
-  DRIVER_VERSIONS: "535.261.03 570.172.08 580.65.06"
+  DRIVER_VERSIONS: "535.274.02 570.195.03 580.95.05"
   CUDA_VERSION: "12.8.1"
-  GOLANG_VERSION: "1.24.5"
+  GOLANG_VERSION: "1.25.2"
   CVE_UPDATES: "curl libc6"
   COMPILE_KERNEL_MODULES: ${{ github.event.inputs.compile_kernel_modules || '1' }}
   OVERWRITE_REMOTE_TAGS: ${{ github.event.inputs.overwrite_remote_tags || '0' }}
