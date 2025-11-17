@@ -28,8 +28,7 @@ _update_package_cache() {
     if [ "${PACKAGE_TAG:-}" != "builtin" ]; then
         echo "Updating the package cache..."
         if ! dnf -q makecache; then
-            echo "FATAL: failed to reach package repositories. "\
-                 "Ensure that the cluster can access the proper networks."
+            echo "FATAL: failed to reach package repositories. "
             exit 1
         fi
     fi
@@ -177,7 +176,7 @@ _install_prerequisites() (
     mv version /lib/modules/${KERNEL_VERSION}/proc
 
     # Parse gcc version - targeting x.y.z-v.fc35.x86_64 format - use regexp () capture and OS VERSION ARCH accordingly.
-    local gcc_version=$(cat /lib/modules/${KERNEL_VERSION}/proc/version | grep -Eo "Red Hat ([0-9\.-]+)"  | grep -Eo "([0-9\.-]+)").${KERNEL_OS_VERSION}.${KERNEL_RPM_ARCH}
+    local gcc_version=$(cat /lib/modules/${KERNEL_VERSION}/proc/version | grep -Eo "gcc \(GCC\) ([0-9\.]+)" | grep -Eo "([0-9\.-]+)").${KERNEL_OS_VERSION}.${KERNEL_RPM_ARCH}
     local current_gcc=$(rpm -qa gcc)
 
     if ! [[ "${current_gcc}" =~ "gcc-${gcc_version}".* ]]; then
@@ -335,6 +334,12 @@ _ensure_nvlink5_prerequisites() (
 #   the correct set of parameters are passed to 'modprobe'.
 _get_module_params() {
     local base_path="/drivers"
+
+    # Starting from R580, we need to enable the CDMM (Coherent Driver Memory Management) module parameter.
+    # This prevents the GPU memory for coherent systems (GH200, GB200 etc) from being exposed as a NUMA node
+    # and thereby preventing over-reporting of a Kubernetes node's memory. This is needed for Kubernetes use-cases
+    NVIDIA_MODULE_PARAMS+=("NVreg_CoherentGPUMemoryMode=driver")
+
     # nvidia
     if [ -f "${base_path}/nvidia.conf" ]; then
        while IFS="" read -r param || [ -n "$param" ]; do
@@ -375,7 +380,6 @@ _load_driver() {
 
     echo "Parsing kernel module parameters..."
     _get_module_params
-
 
     local nv_fw_search_path="$RUN_DIR/driver/lib/firmware"
     local set_fw_path="true"
@@ -443,7 +447,11 @@ _load_driver() {
         fm_pid_file=/var/run/nvidia-fabricmanager/nv-fabricmanager.pid
         nvlsm_config_file=/usr/share/nvidia/nvlsm/nvlsm.conf
         nvlsm_pid_file=/var/run/nvidia-fabricmanager/nvlsm.pid
-        /usr/bin/nvidia-fabricmanager-start.sh $fm_config_file $fm_pid_file $nvlsm_config_file $nvlsm_pid_file
+        /usr/bin/nvidia-fabricmanager-start.sh --mode start \
+                                               --fm-config-file $fm_config_file \
+                                               --fm-pid-file $fm_pid_file \
+                                               --nvlsm-config-file $nvlsm_config_file \
+                                               --nvlsm-pid-file $nvlsm_pid_file
 
     # If not a NVLink5+ switch, check for the presence of NVLink4 (or below) switches
     elif _assert_nvswitch_system; then
@@ -563,6 +571,23 @@ _install_driver() {
     if [ "${ACCEPT_LICENSE}" = "yes" ]; then
         install_args+=("--accept-license")
     fi
+
+    # Specify the --skip-module-load flag for versions of the nvidia-installer that
+    # support it. From the nvidia-installer help output:
+    #
+    #    --skip-module-load
+    #         Skip the test load of the NVIDIA kernel modules after the modules are built,
+    #         and skip loading them after installation is complete.
+    #
+    # Without this flag, a subtle bug can occur if the nvidia-installer fails to unload
+    # the NVIDIA kernel modules after the test load. The modules will remain loaded and
+    # any custom NVIDIA module parameters configured as input to the driver container
+    # will not be applied.
+    #
+    if [ "${DRIVER_BRANCH}" -ge "550" ]; then
+        install_args+=("--skip-module-load")
+    fi
+
     IGNORE_CC_MISMATCH=1 nvidia-installer --kernel-module-only --no-drm --ui=none --no-nouveau-check -m=${KERNEL_TYPE} ${install_args[@]+"${install_args[@]}"}
     # May need to add no-cc-check for Rhel, otherwise it complains about cc missing in path
     # /proc/version and lib/modules/KERNEL_VERSION/proc are different, by default installer looks at /proc/ so, added the proc-mount-point

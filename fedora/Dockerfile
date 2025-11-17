@@ -1,10 +1,14 @@
 ARG FEDORA_VERSION=42
 
-FROM nvcr.io/nvidia/cuda:13.0.1-base-ubi8 as build
+FROM nvcr.io/nvidia/cuda:13.0.2-base-ubi8 as build
 
 ARG TARGETARCH
 ARG GOLANG_VERSION
 ENV GOLANG_VERSION=${GOLANG_VERSION}
+
+# Arg to indicate if driver type is either of passthrough(baremetal) or vgpu
+ARG DRIVER_TYPE=passthrough
+ENV DRIVER_TYPE=$DRIVER_TYPE
 
 SHELL ["/bin/bash", "-c"]
 
@@ -19,10 +23,11 @@ ENV PATH /usr/local/go/bin:$PATH
 
 WORKDIR /work
 
-RUN git clone https://github.com/NVIDIA/gpu-driver-container driver && \
+RUN if [ "$DRIVER_TYPE" = "vgpu" ]; then \
+    git clone https://github.com/NVIDIA/gpu-driver-container driver && \
     cd driver/vgpu/src && \
     go build -o vgpu-util && \
-    mv vgpu-util /work
+    mv vgpu-util /work; fi
 
 ARG FEDORA_VERSION=42
 
@@ -67,6 +72,7 @@ RUN NVIDIA_GPGKEY_SUM=d0664fbbdb8c32356d45de36c5984617217b2d0bef41b93ccecd326ba3
     echo "$NVIDIA_GPGKEY_SUM  /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA" | sha256sum -c --strict -
 
 RUN sh /tmp/install.sh depinstall && \
+    sh /tmp/install.sh setup_cuda_repo && \
     curl -fsSL -o /usr/local/bin/donkey https://github.com/3XX0/donkey/releases/download/v1.1.0/donkey && \
     curl -fsSL -o /usr/local/bin/extract-vmlinux https://raw.githubusercontent.com/torvalds/linux/master/scripts/extract-vmlinux && \
     chmod +x /usr/local/bin/donkey /usr/local/bin/extract-vmlinux && \
@@ -81,34 +87,16 @@ RUN if [ "$DRIVER_TYPE" != "vgpu" ]; then \
     curl -fSsl -O $BASE_URL/$DRIVER_VERSION/NVIDIA-Linux-$DRIVER_ARCH-$DRIVER_VERSION.run && \
     chmod +x  NVIDIA-Linux-$DRIVER_ARCH-$DRIVER_VERSION.run; fi
 
-# Fetch the installer, fabricmanager and libnvidia-nscq automatically for passthrough/baremetal types
-RUN if [ "$DRIVER_TYPE" != "vgpu" ]; then \
-    cd drivers && \
-    DRIVER_ARCH=${TARGETARCH/amd64/x86_64} && DRIVER_ARCH=${DRIVER_ARCH/arm64/aarch64} && \
-    curl -fSsl -O $BASE_URL/$DRIVER_VERSION/NVIDIA-Linux-$DRIVER_ARCH-$DRIVER_VERSION.run && \
-    chmod +x  NVIDIA-Linux-$DRIVER_ARCH-$DRIVER_VERSION.run && \
-    versionArray=(${DRIVER_VERSION//./ }); \
-    DRIVER_BRANCH=${versionArray[0]}; \
-    dnf module enable -y --skip-unavailable nvidia-driver:${DRIVER_BRANCH}-dkms && \
-    dnf install -y --skip-unavailable nvidia-fabric-manager-${DRIVER_VERSION}-1 libnvidia-nscq-${DRIVER_BRANCH}-${DRIVER_VERSION}-1; fi
+# WORKDIR /usr/src/nvidia-$DRIVER_VERSION
 
-RUN if [ "$DRIVER_TYPE" != "vgpu" ] && [ "$DRIVER_BRANCH" -ge "550" ]; then \
-    dnf install -y --skip-unavailable nvidia-imex-${DRIVER_BRANCH}-${DRIVER_VERSION}-1; fi
-
-RUN if [ "$DRIVER_TYPE" != "vgpu" ] && [ "$DRIVER_BRANCH" -ge "570" ]; then \
-    dnf install -y --skip-unavailable infiniband-diags nvlsm; fi
-
-# libnvsdm packages are not available for arm64
-RUN if [ "$DRIVER_TYPE" != "vgpu" ] && [ "$DRIVER_BRANCH" -ge "570" ] && [ "$TARGETARCH" != "arm64" ]; then \
-    dnf install -y --skip-unavailable libnvsdm-${DRIVER_BRANCH}-${DRIVER_VERSION}-1; fi
-
-WORKDIR /usr/src/nvidia-$DRIVER_VERSION
+# Fetch the installer, fabricmanager, libnvidia-nscq, libnvsdm, imex packages
+RUN sh /tmp/install.sh extrapkgsinstall
 
 COPY nvidia-driver /usr/local/bin
 # COPY ocp_dtk_entrypoint /usr/local/bin
 COPY common.sh /usr/local/bin
 
-COPY --from=build /work/vgpu-util /usr/local/bin
+COPY --from=build /work/vgpu-util* /usr/local/bin
 
 WORKDIR /drivers
 
@@ -125,10 +113,6 @@ LABEL version="${DRIVER_VERSION}"
 LABEL release="N/A"
 LABEL summary="Provision the NVIDIA driver through containers"
 LABEL description="See summary"
-
-# Add NGC DL license from the CUDA image
-COPY --from=build /NGC-DL-CONTAINER-LICENSE /NGC-DL-CONTAINER-LICENSE
-RUN mkdir /licenses && mv /NGC-DL-CONTAINER-LICENSE /licenses/NGC-DL-CONTAINER-LICENSE
 
 # Install / upgrade packages here that are required to resolve CVEs
 ARG CVE_UPDATES
