@@ -1,6 +1,6 @@
 ARG FEDORA_VERSION=42
 
-FROM nvcr.io/nvidia/cuda:13.0.2-base-ubi8 as build
+FROM nvcr.io/nvidia/cuda:13.0.2-base-ubi8 AS build
 
 ARG TARGETARCH
 ARG GOLANG_VERSION
@@ -19,7 +19,7 @@ RUN OS_ARCH=${TARGETARCH/x86_64/amd64} && OS_ARCH=${OS_ARCH/aarch64/arm64} && \
     curl https://storage.googleapis.com/golang/go${GOLANG_VERSION}.linux-${OS_ARCH}.tar.gz \
     | tar -C /usr/local -xz
 
-ENV PATH /usr/local/go/bin:$PATH
+ENV PATH=/usr/local/go/bin:$PATH
 
 WORKDIR /work
 
