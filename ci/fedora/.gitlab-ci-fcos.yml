@@ -84,12 +84,12 @@ variables:
   # To survey latest Data Center driver versions available:
   # https://www.nvidia.com/Download/Find.aspx
   # https://www.nvidia.com/en-us/drivers/unix/
-  DRIVER_VERSION: "580.65.06"
-  DRIVER_VERSIONS: 535.261.03 570.172.08 580.65.06
+  DRIVER_VERSION: "580.105.08"
+  DRIVER_VERSIONS: 535.274.02 570.195.03 580.105.08
 
   CUDA_VERSION: 12.8.1
 
-  GOLANG_VERSION: 1.24.5
+  GOLANG_VERSION: 1.25.4
 
   CVE_UPDATES: "curl libc6"
 
