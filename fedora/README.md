@@ -2,11 +2,13 @@
 
 [FedoraCoreOS (FCOS)](https://getfedora.org/en/coreos?stream=stable) is a self-updating minimal container-optimized Linux distribution downstream of Fedora.
 
-NVIDIA does not yet support FCOS and so the forked Gitlab project [here](https://gitlab.com/container-toolkit-fcos/driver.git) produces Fedora kernel-specific container images.
+NVIDIA does not yet support FCOS and so the forked Github project [here](https://github.com/fifofonix/gpu-driver-container.git) produces Fedora kernel-specific container images.
+
+Historical note only: This repo was originally [here](https://gitlab.com/container-toolkit-fcos/driver.git) prior to the NVIDIA project's migration to github.com.
 
 Since these images are built on FedoraCoreOS gitlab-runners tracking the next/development/stable streams we use the `nvidia-driver update` function to include pre-compiled kernel modules speeding driver startup.
 
-Images are pushed first on a pre-release basis to the in-built GitLab docker registry and pushed to Dockerhub [here](https://hub.docker.com/repository/docker/fifofonix/driver) once security scanned and validated.
+Images are pushed first on a pre-release basis to the in-built Github docker registry and pushed to Dockerhub [here](https://hub.docker.com/repository/docker/fifofonix/driver) once security scanned and validated.
 
 When run as a privileged 'driver container' they install/run NVIDIA kernel modules.
 
@@ -29,7 +31,7 @@ The driver container is privileged, and here we choose to launch via podman inst
 ```bash
 # https://discussion.fedoraproject.org/t/feedback-for-anyone-using-nvidia-with-kernel-6-15-x/156342
 $ sudo rpm-ostree kargs --append=rd.driver.blacklist=nouveau,nova_core --append=modprobe.blacklist=nouveau,nova_core
-$ DRIVER_VERSION=580.65.06 # Check ci/fedora/.common-ci-fcos.yml for latest driver versions
+$ DRIVER_VERSION=580.105.08 # Check ci/fedora/.common-ci-fcos.yml for latest driver versions
 $ FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2)
 $ podman run -d --privileged --pid=host \
      -v /run/nvidia:/run/nvidia:shared \
@@ -76,10 +78,11 @@ systemd:
         ExecStart=/bin/sh -c ' \
           FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2); \
           KERNEL_VERSION=$(/bin/uname -r); \
-          if /bin/podman manifest inspect registry.gitlab.com/container-toolkit-fcos/driver:580.65.06-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID > /dev/null; then \
-            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:580.65.06-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID; \
+          # Not all container registries (gchr.io) support manifest inspect so we image pull instead
+          if /bin/podman image pull registry.gitlab.com/container-toolkit-fcos/driver:580.105.08-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID > /dev/null; then \
+            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:580.105.08-$$KERNEL_VERSION-fedora$$FEDORA_VERSION_ID; \
           else \
-            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:580.65.06-fedora$$FEDORA_VERSION_ID; \
+            IMAGE_NAME=registry.gitlab.com/container-toolkit-fcos/driver:580.105.08-fedora$$FEDORA_VERSION_ID; \
             PATCH_MOUNT="-v /var/acme/nvidia-driver-patch:/patch"
           fi; \
           /bin/podman pull $$IMAGE_NAME; \
@@ -108,16 +111,16 @@ You should be able to step into the driver container and run the `nvidia-smi` to
 $ # Assumes you're running the driver container via podman and named nvidia-driver as above...
 $ podman exec -it nvidia-driver sh
 sh-5.2# nvidia-smi
-Mon Sep  1 11:18:42 2025
+Tue Nov 18 14:28:53 2025
 +-----------------------------------------------------------------------------------------+
-| NVIDIA-SMI 580.65.06              Driver Version: 580.65.06      CUDA Version: 13.0     |
+| NVIDIA-SMI 580.105.08             Driver Version: 580.105.08     CUDA Version: 13.0     |
 +-----------------------------------------+------------------------+----------------------+
 | GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
 | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
 |   0  Tesla T4                       Off |   00000000:00:1E.0 Off |                    0 |
-| N/A   35C    P0             26W /   70W |       0MiB /  15360MiB |      0%      Default |
+| N/A   34C    P0             26W /   70W |       0MiB /  15360MiB |      0%      Default |
 |                                         |                        |                  N/A |
 +-----------------------------------------+------------------------+----------------------+
 
@@ -127,6 +130,7 @@ Mon Sep  1 11:18:42 2025
 |        ID   ID                                                               Usage      |
 |=========================================================================================|
 |  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
 +-----------------------------------------------------------------------------------------+
 ```
 
@@ -139,6 +143,11 @@ On FedoraCoreOS you may choose to layer the container toolkit using `rpm-ostree`
 ```yaml
 variant: fcos
 version: 1.5.0
+kernel_arguments:
+  should_exist:
+    # https://discussion.fedoraproject.org/t/feedback-for-anyone-using-nvidia-with-kernel-6-15-x/156342
+    - rd.driver.blacklist=nouveau,nova_core
+    - modprobe.blacklist=nouveau,nova_core
 storage:
   files:
     - path: /etc/nvidia-container-runtime/config.toml
