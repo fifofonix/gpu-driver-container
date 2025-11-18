@@ -147,7 +147,11 @@ imex_install() {
 
 extra_pkgs_install() {
   if [ "$DRIVER_TYPE" != "vgpu" ]; then
-      dnf module enable -y nvidia-driver:${DRIVER_BRANCH}-dkms
+      dnf module enable -y --skip-unavailable nvidia-driver:${DRIVER_BRANCH}-dkms | true
+      if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+        echo "Failed to enable nvidia-driver module ${DRIVER_BRANCH}-dkms"
+        exit 1
+      fi
 
       fabricmanager_install
       nscq_install
@@ -159,7 +163,9 @@ extra_pkgs_install() {
 
 setup_cuda_repo() {
     OS_ARCH=${TARGETARCH/amd64/x86_64} && OS_ARCH=${OS_ARCH/arm64/sbsa};
-    dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/${OS_ARCH}/cuda-rhel9.repo
+    FEDORA_VERSION_ID=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f2)
+    curl -s -L https://developer.download.nvidia.com/compute/cuda/repos/fedora${FEDORA_VERSION_ID}/${OS_ARCH}/cuda-fedora${FEDORA_VERSION_ID}.repo | \
+      sudo tee /etc/yum.repos.d/cuda-fedora${FEDORA_VERSION_ID}.repo
 }
 
 if [ "$1" = "nvinstall" ]; then
@@ -167,9 +173,13 @@ if [ "$1" = "nvinstall" ]; then
 elif [ "$1" = "depinstall" ]; then
   dep_installer
 elif [ "$1" = "extrapkgsinstall" ]; then
-  extra_pkgs_install
+  echo "Skipping extra_pkgs_install (no Fedora43 artifacts exist presently)"
+  # TODO: Re-enable when Fedora43 packages become available."
+  # extra_pkgs_install
 elif [ "$1" = "setup_cuda_repo" ]; then
-  setup_cuda_repo
+  echo "Skipping setup_cuda_repo (no Fedora43 artifacts exist presently)"
+  # TODO: Re-enable when Fedora43 packages become available."
+  # setup_cuda_repo
 else
   echo "Unknown function: $1"
 fi
